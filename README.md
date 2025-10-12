@@ -68,6 +68,23 @@ View your app in AI Studio: https://ai.studio/apps/drive/15FPnpECp6G1ENImCKFUVJk
 
 6. Run the app: `npm run dev`
 
+### Next.js Supabase sample
+
+If you are following the Supabase + Next.js quickstart, a minimal example lives in
+`next-app/`. It demonstrates how to wire the official `@supabase/ssr` helpers for
+Server Components, middleware, and client components while querying the `notes`
+table created in the tutorial. To try it:
+
+1. Copy your Supabase credentials into `next-app/.env.local` as
+   `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+2. Run `npm install` inside a Next.js project (or create one with
+   `npx create-next-app@latest`) and copy the `next-app` directory into it.
+3. Visit `/notes` to confirm the server-rendered page lists the records from your
+   Supabase `notes` table.
+
+Feel free to adapt the utility helpers under `next-app/utils/supabase` for more
+advanced queries or authenticated flows.
+
 ## Troubleshooting
 
 ### "failed to update branch" when syncing with a remote
