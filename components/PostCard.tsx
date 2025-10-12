@@ -22,9 +22,10 @@ const PostCard: React.FC<PostCardProps> = ({ post, onEdit }) => {
   const { user, toggleFollow } = authContext || {};
   
   useEffect(() => {
-    if (incrementPostView && post.id) {
-        incrementPostView(post.id);
-    }
+    if (!incrementPostView || !post.id) return;
+    incrementPostView(post.id).catch(error => {
+      console.error('Failed to record post view', error);
+    });
   }, [incrementPostView, post.id]);
 
   if (!user || !postContext || !toggleFollow || !addComment) return null;
@@ -33,9 +34,13 @@ const PostCard: React.FC<PostCardProps> = ({ post, onEdit }) => {
   const isFollowingAuthor = user.following.includes(post.author.id);
   const isOwnPost = post.author.id === user.id;
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
       if(window.confirm('Apakah Anda yakin ingin menghapus postingan ini?')) {
-          deletePost?.(post.id);
+          try {
+              await deletePost?.(post.id);
+          } catch (error) {
+              console.error('Failed to delete post', error);
+          }
       }
       setIsMenuOpen(false);
   }
@@ -45,12 +50,16 @@ const PostCard: React.FC<PostCardProps> = ({ post, onEdit }) => {
     setIsMenuOpen(false);
   }
 
-  const handleCommentSubmit = (e: FormEvent) => {
+  const handleCommentSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const trimmedComment = commentText.trim();
     if (trimmedComment) {
-      addComment(post.id, trimmedComment);
-      setCommentText('');
+      try {
+        await addComment(post.id, trimmedComment);
+        setCommentText('');
+      } catch (error) {
+        console.error('Failed to add comment', error);
+      }
     }
   };
 

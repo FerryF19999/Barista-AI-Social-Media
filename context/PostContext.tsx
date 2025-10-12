@@ -1,7 +1,8 @@
 import React, { createContext, useState, useEffect, ReactNode, useContext, useCallback } from 'react';
-import { Post, User, Comment } from '../types';
+import { Post, User } from '../types';
 import { AuthContext } from './AuthContext';
-import useSyncedLocalStorage from '../hooks/useSyncedLocalStorage';
+import { api } from '../services/api';
+import { realtimeClient } from '../services/realtimeClient';
 
 
 // --- Mock Data for Initial Feed ---
@@ -48,160 +49,149 @@ const MOCK_POSTS: Post[] = [
 ];
 // --- End of Mock Data ---
 
-const POSTS_DB_KEY = 'posts-db';
-
-const getInitialPosts = (): Post[] => {
-    // This function now only provides the initial fallback data.
-    // The useSyncedLocalStorage hook will handle reading from storage.
-    return MOCK_POSTS;
-};
+const getInitialPosts = (): Post[] => MOCK_POSTS;
 
 interface PostContextType {
   posts: Post[];
-  addPost: (postData: { imageUrl: string; caption: string; locationTag: string }) => void;
-  toggleLike: (postId: string) => void;
-  toggleBookmark: (postId: string) => void;
-  incrementPostView: (postId: string) => void;
-  deletePost: (postId: string) => void;
-  updatePost: (postId: string, updatedData: { caption: string; locationTag: string }) => void;
-  addComment: (postId: string, text: string) => void;
+  addPost: (postData: { imageUrl: string; caption: string; locationTag: string }) => Promise<void>;
+  toggleLike: (postId: string) => Promise<void>;
+  toggleBookmark: (postId: string) => Promise<void>;
+  incrementPostView: (postId: string) => Promise<void>;
+  deletePost: (postId: string) => Promise<void>;
+  updatePost: (postId: string, updatedData: { caption: string; locationTag: string }) => Promise<void>;
+  addComment: (postId: string, text: string) => Promise<void>;
 }
 
 export const PostContext = createContext<PostContextType | undefined>(undefined);
 
 export const PostProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [posts, setPosts] = useSyncedLocalStorage<Post[]>(POSTS_DB_KEY, getInitialPosts);
+  const [posts, setPosts] = useState<Post[]>(getInitialPosts());
   const authContext = useContext(AuthContext);
   const { user, users } = authContext || {};
 
-  // Effect to synchronize post author data with the main users list from AuthContext.
-  // This ensures that if a user updates their profile (e.g., name or avatar),
-  // it reflects on all their existing posts. This logic remains important.
   useEffect(() => {
-    if (users && users.length > 0) {
-      const userMap = new Map<string, User>(users.map(u => [u.id, u]));
-      
-      setPosts(prevPosts => {
-        let hasChanges = false;
-        const updatedPosts = prevPosts.map(post => {
-          const updatedAuthor = userMap.get(post.author.id);
-          // Check if author data is stale before updating
-          if (updatedAuthor && (post.author.name !== updatedAuthor.name || post.author.avatarUrl !== updatedAuthor.avatarUrl)) {
-            hasChanges = true;
-            // Also update author info in comments
-            const updatedComments = post.comments.map(comment => {
-              const updatedCommentAuthor = userMap.get(comment.author.id);
-              if (updatedCommentAuthor && (comment.author.name !== updatedCommentAuthor.name || comment.author.avatarUrl !== updatedCommentAuthor.avatarUrl)) {
-                return { ...comment, author: updatedCommentAuthor };
-              }
-              return comment;
-            });
-            return { ...post, author: updatedAuthor, comments: updatedComments };
-          }
-          return post;
-        });
+    let isMounted = true;
 
-        // Only update state if there were actual changes to prevent infinite loops
-        return hasChanges ? updatedPosts : prevPosts;
+    const fetchPosts = async () => {
+      try {
+        const remotePosts = await api.getPosts();
+        if (isMounted) {
+          setPosts(remotePosts);
+        }
+      } catch (error) {
+        console.error('Failed to fetch posts from backend', error);
+      }
+    };
+
+    fetchPosts();
+
+    const unsubscribeInit = realtimeClient.subscribe('INIT', payload => {
+      if (payload.posts) {
+        setPosts(payload.posts);
+      }
+    });
+    const unsubscribePosts = realtimeClient.subscribe('POSTS_UPDATED', updatedPosts => {
+      setPosts(updatedPosts);
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribeInit();
+      unsubscribePosts();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!users || users.length === 0) return;
+    const userMap = new Map<string, User>(users.map(u => [u.id, u]));
+
+    setPosts(prevPosts => {
+      let hasChanges = false;
+      const updatedPosts = prevPosts.map(post => {
+        const updatedAuthor = userMap.get(post.author.id);
+        let nextPost = post;
+        if (updatedAuthor && (post.author.name !== updatedAuthor.name || post.author.avatarUrl !== updatedAuthor.avatarUrl)) {
+          const updatedComments = post.comments.map(comment => {
+            const updatedCommentAuthor = userMap.get(comment.author.id);
+            if (updatedCommentAuthor && (comment.author.name !== updatedCommentAuthor.name || comment.author.avatarUrl !== updatedCommentAuthor.avatarUrl)) {
+              return { ...comment, author: updatedCommentAuthor };
+            }
+            return comment;
+          });
+          hasChanges = true;
+          nextPost = { ...post, author: updatedAuthor, comments: updatedComments };
+        }
+        return nextPost;
       });
+      return hasChanges ? updatedPosts : prevPosts;
+    });
+  }, [users]);
+
+
+  const addPost = useCallback(async (postData: { imageUrl: string; caption: string; locationTag: string }) => {
+    if (!user) return;
+    try {
+      await api.createPost({
+        authorId: user.id,
+        imageUrl: postData.imageUrl,
+        caption: postData.caption,
+        locationTag: postData.locationTag,
+      });
+    } catch (error) {
+      console.error('Failed to add post', error);
     }
-  }, [users, setPosts]);
+  }, [user]);
 
-
-  const addPost = useCallback((postData: { imageUrl: string; caption: string; locationTag: string }) => {
+  const toggleLike = useCallback(async (postId: string) => {
     if (!user) return;
+    try {
+      await api.toggleLike(postId, user.id);
+    } catch (error) {
+      console.error('Failed to toggle like', error);
+    }
+  }, [user]);
 
-    const newPost: Post = {
-      id: `post_${Date.now()}`,
-      author: user,
-      imageUrl: postData.imageUrl,
-      caption: postData.caption,
-      locationTag: postData.locationTag,
-      likes: [],
-      isBookmarked: false,
-      comments: [],
-      views: [],
-    };
+  const toggleBookmark = useCallback(async (postId: string) => {
+    try {
+      await api.toggleBookmark(postId);
+    } catch (error) {
+      console.error('Failed to toggle bookmark', error);
+    }
+  }, []);
 
-    setPosts(prevPosts => [newPost, ...prevPosts]);
-  }, [user, setPosts]);
-
-  const toggleLike = useCallback((postId: string) => {
-    if (!user) return;
-    const userId = user.id;
-
-    setPosts(prevPosts =>
-      prevPosts.map(post => {
-        if (post.id === postId) {
-          const isLiked = post.likes.includes(userId);
-          const updatedLikes = isLiked
-            ? post.likes.filter(id => id !== userId)
-            : [...post.likes, userId];
-          return { ...post, likes: updatedLikes };
-        }
-        return post;
-      })
-    );
-  }, [user, setPosts]);
-
-  const toggleBookmark = useCallback((postId: string) => {
-    setPosts(prevPosts =>
-      prevPosts.map(post => {
-        if (post.id === postId) {
-          return { ...post, isBookmarked: !post.isBookmarked };
-        }
-        return post;
-      })
-    );
-  }, [setPosts]);
-  
-  const incrementPostView = useCallback((postId: string) => {
+  const incrementPostView = useCallback(async (postId: string) => {
       if (!user) return;
-      const userId = user.id;
+      try {
+        await api.incrementView(postId, user.id);
+      } catch (error) {
+        console.error('Failed to record post view', error);
+      }
+  }, [user]);
 
-      setPosts(prevPosts =>
-          prevPosts.map(post => {
-              if (post.id === postId) {
-                  // Only add user to views array if they haven't viewed it before
-                  if (!post.views.includes(userId)) {
-                      return { ...post, views: [...post.views, userId] };
-                  }
-              }
-              return post;
-          })
-      );
-  }, [user, setPosts]);
+  const deletePost = useCallback(async (postId: string) => {
+    try {
+      await api.deletePost(postId);
+    } catch (error) {
+      console.error('Failed to delete post', error);
+    }
+  }, []);
 
-  const deletePost = useCallback((postId: string) => {
-    setPosts(prevPosts => prevPosts.filter(post => post.id !== postId));
-  }, [setPosts]);
+  const updatePost = useCallback(async (postId: string, updatedData: { caption: string; locationTag: string }) => {
+    try {
+      await api.updatePost(postId, updatedData);
+    } catch (error) {
+      console.error('Failed to update post', error);
+    }
+  }, []);
 
-  const updatePost = useCallback((postId: string, updatedData: { caption: string; locationTag: string }) => {
-    setPosts(prevPosts =>
-      prevPosts.map(post =>
-        post.id === postId ? { ...post, ...updatedData } : post
-      )
-    );
-  }, [setPosts]);
-
-  const addComment = useCallback((postId: string, text: string) => {
+  const addComment = useCallback(async (postId: string, text: string) => {
     if (!user) return;
-
-    const newComment: Comment = {
-      id: `comment_${Date.now()}`,
-      text,
-      author: user,
-    };
-
-    setPosts(prevPosts => 
-      prevPosts.map(post => {
-        if (post.id === postId) {
-          return { ...post, comments: [...post.comments, newComment] };
-        }
-        return post;
-      })
-    );
-  }, [user, setPosts]);
+    try {
+      await api.addComment(postId, user.id, text);
+    } catch (error) {
+      console.error('Failed to add comment', error);
+    }
+  }, [user]);
 
 
   const value = { posts, addPost, toggleLike, toggleBookmark, incrementPostView, deletePost, updatePost, addComment };

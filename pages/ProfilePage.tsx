@@ -112,17 +112,21 @@ const PostGrid: React.FC<{
     posts: Post[];
     isOwnProfile: boolean;
     showViews?: boolean;
-    onDelete: (postId: string) => void;
+    onDelete: (postId: string) => Promise<void> | void;
     onEdit: (post: Post) => void;
 }> = ({ posts, isOwnProfile, showViews, onDelete, onEdit }) => {
     if (posts.length === 0) {
         return <p className="text-center text-stone-500 mt-8">Tidak ada postingan untuk ditampilkan.</p>;
     }
 
-    const handleDeleteClick = (e: React.MouseEvent, postId: string) => {
+    const handleDeleteClick = async (e: React.MouseEvent, postId: string) => {
         e.stopPropagation();
         if (window.confirm('Apakah Anda yakin ingin menghapus postingan ini?')) {
-            onDelete(postId);
+            try {
+                await onDelete(postId);
+            } catch (error) {
+                console.error('Failed to delete post', error);
+            }
         }
     }
 
@@ -211,9 +215,9 @@ const ProfilePage: React.FC = () => {
     const totalLikesReceived = userPosts.reduce((sum, post) => sum + post.likes.length, 0);
     const isFollowing = loggedInUser.following.includes(profileUser.id);
 
-    const handleSaveProfile = () => {
+    const handleSaveProfile = async () => {
         if (!isOwnProfile) return;
-        updateUser({ name, avatarUrl, bio });
+        await updateUser({ name, avatarUrl, bio });
         setIsEditingProfile(false);
     };
 
@@ -240,9 +244,9 @@ const ProfilePage: React.FC = () => {
         }
     };
 
-     const handleSavePostEdit = (updatedData: { caption: string; locationTag: string }) => {
+     const handleSavePostEdit = async (updatedData: { caption: string; locationTag: string }) => {
         if (editingPost) {
-            updatePost(editingPost.id, updatedData);
+            await updatePost(editingPost.id, updatedData);
             setEditingPost(null);
         }
     };
