@@ -1,0 +1,7 @@
+{
+  "name": "AI Barista PWA",
+  "description": "An AI-powered barista assistant to help you discover and learn about coffee. Get recommendations, explore different brews, and save your favorites to a wishlist.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
