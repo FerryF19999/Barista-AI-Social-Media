@@ -2,6 +2,12 @@ type EnvLookup = Record<string, string | undefined>;
 
 const importMetaEnv = import.meta.env as EnvLookup;
 
+const FALLBACK_ENV: EnvLookup = {
+  VITE_SUPABASE_URL: 'https://jfanrxopqcsknnqlzmlv.supabase.co',
+  VITE_SUPABASE_ANON_KEY:
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpmYW5yeG9wcWNza25ucWx6bWx2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAyNDY2ODgsImV4cCI6MjA3NTgyMjY4OH0.ph4V7lXH6acslBu20uQxGpYE5CyNCFqrf2eQQleH7ng',
+};
+
 const getRuntimeEnv = (keys: string[]): string => {
   for (const key of keys) {
     const fromImport = importMetaEnv[key];
@@ -31,6 +37,11 @@ const getRuntimeEnv = (keys: string[]): string => {
       if (fromNested) {
         return fromNested;
       }
+    }
+
+    const fromFallback = FALLBACK_ENV[key];
+    if (fromFallback) {
+      return fromFallback;
     }
   }
 
