@@ -35,13 +35,16 @@ View your app in AI Studio: https://ai.studio/apps/drive/15FPnpECp6G1ENImCKFUVJk
    the **Project Settings → Database** page). Export it as `SUPABASE_DB_URL` or
    `DATABASE_URL` before running the migration/seed scripts below.
 
-3. Provision the required tables inside Supabase. Supply the database
-   connection string from your project's dashboard as
-   `SUPABASE_DB_URL` (or `DATABASE_URL`) and run:
+3. Provision the required tables inside Supabase. Run `npm run
+   supabase:migrate` and paste the database connection string (from **Project
+   Settings → Database → Connection string → URI**) when prompted. The helper
+   remembers the value by writing `SUPABASE_DB_URL=...` to `.env.local` so
+   subsequent runs can be non-interactive. If you already exported
+   `SUPABASE_DB_URL`/`DATABASE_URL` in your shell, the script will use that
+   instead and skip the prompt.
 
    ```bash
-   SUPABASE_DB_URL="postgresql://postgres:YOUR_PASSWORD@db.<ref>.supabase.co:6543/postgres" \
-     npm run supabase:migrate
+   npm run supabase:migrate
    ```
 
    The script automatically executes the SQL in
@@ -54,14 +57,13 @@ View your app in AI Studio: https://ai.studio/apps/drive/15FPnpECp6G1ENImCKFUVJk
    store so the UI has content immediately:
 
    ```bash
-   SUPABASE_DB_URL="postgresql://postgres:YOUR_PASSWORD@db.<ref>.supabase.co:6543/postgres" \
-     npm run supabase:seed
+   npm run supabase:seed
    ```
 
    You can re-run the seed whenever you want to reset the demo data—it upserts
    the profiles and posts so existing changes are preserved if their IDs match.
    To run the migration and seed together, execute `npm run supabase:setup` with
-   the same connection string environment variable.
+   the same saved connection string (or environment variable).
 
 5. Enable Realtime for the `profiles` and `posts` tables so every mutation is
    pushed instantly to all connected clients.
