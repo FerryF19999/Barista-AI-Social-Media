@@ -82,18 +82,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     fetchUsers();
 
-    const unsubscribeInit = realtimeClient.subscribe('INIT', payload => {
-      if (payload.users) {
-        setUsers(payload.users);
-      }
-    });
     const unsubscribeUsers = realtimeClient.subscribe('USERS_UPDATED', updatedUsers => {
       setUsers(updatedUsers);
     });
 
     return () => {
       isMounted = false;
-      unsubscribeInit();
       unsubscribeUsers();
     };
   }, []);

@@ -85,18 +85,12 @@ export const PostProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     fetchPosts();
 
-    const unsubscribeInit = realtimeClient.subscribe('INIT', payload => {
-      if (payload.posts) {
-        setPosts(payload.posts);
-      }
-    });
     const unsubscribePosts = realtimeClient.subscribe('POSTS_UPDATED', updatedPosts => {
       setPosts(updatedPosts);
     });
 
     return () => {
       isMounted = false;
-      unsubscribeInit();
       unsubscribePosts();
     };
   }, []);

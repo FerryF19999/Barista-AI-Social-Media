@@ -1,65 +1,46 @@
-import { EVENTS_URL } from './config';
-import { Post, User } from '../types';
+import type { Post, User } from '../types';
+import { api } from './api';
+import { getSupabaseClient } from './supabaseClient';
 
-type EventType = 'INIT' | 'USERS_UPDATED' | 'POSTS_UPDATED';
+export type EventType = 'USERS_UPDATED' | 'POSTS_UPDATED';
 
 type Listener<T> = (payload: T) => void;
 
 type EventPayloads = {
-  INIT: { users?: User[]; posts?: Post[] };
   USERS_UPDATED: User[];
   POSTS_UPDATED: Post[];
 };
 
 class RealtimeClient {
-  private source: EventSource | null = null;
   private listeners: Map<EventType, Set<Listener<any>>> = new Map();
-  private reconnectTimeout: number | null = null;
+  private initialized = false;
+  private pendingUsersFetch: Promise<void> | null = null;
+  private pendingPostsFetch: Promise<void> | null = null;
 
-  constructor(private url: string) {}
-
-  private connect() {
-    if (typeof window === 'undefined') {
+  private async ensureSubscription() {
+    if (this.initialized) {
       return;
     }
 
-    if (this.source) {
+    const client = getSupabaseClient();
+    if (!client || typeof window === 'undefined') {
       return;
     }
 
-    this.source = new EventSource(this.url);
+    const channel = client.channel('barista-realtime');
 
-    this.source.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data) as { type: EventType; payload: EventPayloads[EventType] };
-        this.emit(data.type, data.payload);
-      } catch (error) {
-        console.error('Failed to parse realtime event', error);
-      }
-    };
-
-    this.source.onerror = () => {
-      this.cleanup();
-      this.scheduleReconnect();
-    };
-  }
-
-  private scheduleReconnect() {
-    if (this.reconnectTimeout !== null) {
-      return;
-    }
-
-    this.reconnectTimeout = window.setTimeout(() => {
-      this.reconnectTimeout = null;
-      this.connect();
-    }, 3000);
-  }
-
-  private cleanup() {
-    if (this.source) {
-      this.source.close();
-      this.source = null;
-    }
+    channel
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+        this.queueUsersDispatch();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => {
+        this.queuePostsDispatch();
+      })
+      .subscribe(status => {
+        if (status === 'SUBSCRIBED') {
+          this.initialized = true;
+        }
+      });
   }
 
   private emit<T extends EventType>(type: T, payload: EventPayloads[T]) {
@@ -77,6 +58,44 @@ class RealtimeClient {
     });
   }
 
+  private queueUsersDispatch() {
+    if (!this.listeners.has('USERS_UPDATED')) {
+      return;
+    }
+
+    if (!this.pendingUsersFetch) {
+      this.pendingUsersFetch = (async () => {
+        try {
+          const users = await api.getUsers();
+          this.emit('USERS_UPDATED', users);
+        } catch (error) {
+          console.error('Failed to refresh users from Supabase', error);
+        } finally {
+          this.pendingUsersFetch = null;
+        }
+      })();
+    }
+  }
+
+  private queuePostsDispatch() {
+    if (!this.listeners.has('POSTS_UPDATED')) {
+      return;
+    }
+
+    if (!this.pendingPostsFetch) {
+      this.pendingPostsFetch = (async () => {
+        try {
+          const posts = await api.getPosts();
+          this.emit('POSTS_UPDATED', posts);
+        } catch (error) {
+          console.error('Failed to refresh posts from Supabase', error);
+        } finally {
+          this.pendingPostsFetch = null;
+        }
+      })();
+    }
+  }
+
   subscribe<T extends EventType>(type: T, listener: Listener<EventPayloads[T]>) {
     if (!this.listeners.has(type)) {
       this.listeners.set(type, new Set());
@@ -85,7 +104,9 @@ class RealtimeClient {
     const listeners = this.listeners.get(type)!;
     listeners.add(listener as Listener<any>);
 
-    this.connect();
+    this.ensureSubscription().catch(error => {
+      console.error('Failed to start Supabase realtime subscription', error);
+    });
 
     return () => {
       listeners.delete(listener as Listener<any>);
@@ -96,4 +117,4 @@ class RealtimeClient {
   }
 }
 
-export const realtimeClient = new RealtimeClient(EVENTS_URL);
+export const realtimeClient = new RealtimeClient();
