@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { User } from '../types';
 import { api } from '../services/api';
 import { realtimeClient } from '../services/realtimeClient';
@@ -44,6 +44,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [users, setUsers] = useState<User[]>(getInitialUsers());
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const upsertUser = useCallback((nextUser: User) => {
+    setUsers(prevUsers => {
+      const index = prevUsers.findIndex(candidate => candidate.id === nextUser.id);
+      if (index !== -1) {
+        const updated = [...prevUsers];
+        updated[index] = nextUser;
+        return updated;
+      }
+      return [...prevUsers, nextUser];
+    });
+  }, []);
+
+  const replaceUsers = useCallback((nextUsers: User[]) => {
+    setUsers(nextUsers);
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -110,6 +126,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       setUser(response.user);
+      upsertUser(response.user);
       if (typeof window !== 'undefined') {
         localStorage.setItem(AUTH_USER_KEY, JSON.stringify(response.user));
       }
@@ -128,6 +145,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       setUser(response.user);
+      upsertUser(response.user);
       if (typeof window !== 'undefined') {
         localStorage.setItem(AUTH_USER_KEY, JSON.stringify(response.user));
       }
@@ -151,6 +169,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const response = await api.updateUser(user.id, updatedData);
       const updatedUser = response.user;
       setUser(updatedUser);
+      upsertUser(updatedUser);
       if (typeof window !== 'undefined') {
         localStorage.setItem(AUTH_USER_KEY, JSON.stringify(updatedUser));
       }
@@ -172,7 +191,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const toggleFollow = async (targetUserId: string) => {
     if (!user) return;
     try {
-      await api.toggleFollow(user.id, targetUserId);
+      const response = await api.toggleFollow(user.id, targetUserId);
+      if (response?.users) {
+        replaceUsers(response.users);
+      } else {
+        const refreshedUsers = await api.getUsers();
+        replaceUsers(refreshedUsers);
+      }
     } catch (error) {
       console.error('Failed to toggle follow', error);
     }
