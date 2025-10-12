@@ -88,6 +88,41 @@ View your app in AI Studio: https://ai.studio/apps/drive/15FPnpECp6G1ENImCKFUVJk
 
 ## Troubleshooting
 
+### "failed to update branch" when syncing with a remote
+
+GitHub and other hosting providers will surface a **"failed to update branch"**
+banner on pull requests when the branch cannot be fast-forwarded to the latest
+default branch. This typically means your local branch is missing commits that
+were pushed to `main`/`master` after you started your work.
+
+To resolve the warning:
+
+1. Fetch the latest default-branch commits from your remote.
+
+   ```bash
+   git fetch origin main
+   ```
+
+2. Rebase (or merge) your feature branch on top of the freshly fetched
+   `origin/main`.
+
+   ```bash
+   git rebase origin/main
+   # -- or --
+   # git merge origin/main
+   ```
+
+3. Resolve any merge conflicts that appear, run the project tests/build, and
+   push the updated branch.
+
+   ```bash
+   npm run build
+   git push --force-with-lease
+   ```
+
+Once your branch contains the latest upstream commits, GitHub will automatically
+clear the message and allow the PR to be merged.
+
 ### "fatal: No configured push destination" when creating a PR
 
 This repo runs inside a disposable environment that does not come with a remote
