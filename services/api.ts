@@ -84,7 +84,9 @@ const mapPostRowToPost = (row: PostRow, userMap: Map<string, User>): Post => {
 const buildUserMap = async (userIds: string[]): Promise<Map<string, User>> => {
   const client = getSupabaseClient();
   if (!client) {
-    throw new Error('Supabase client is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+    throw new Error(
+      'Supabase client is not configured. Provide VITE_SUPABASE_* or NEXT_PUBLIC_SUPABASE_* environment variables.'
+    );
   }
 
   const uniqueIds = Array.from(new Set(userIds)).filter(Boolean);
@@ -108,7 +110,9 @@ const buildUserMap = async (userIds: string[]): Promise<Map<string, User>> => {
 const transformPostRows = async (rows: PostRow[]): Promise<Post[]> => {
   const client = getSupabaseClient();
   if (!client) {
-    throw new Error('Supabase client is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+    throw new Error(
+      'Supabase client is not configured. Provide VITE_SUPABASE_* or NEXT_PUBLIC_SUPABASE_* environment variables.'
+    );
   }
 
   if (rows.length === 0) {
@@ -128,7 +132,9 @@ const transformPostRows = async (rows: PostRow[]): Promise<Post[]> => {
 const getPostById = async (postId: string): Promise<Post> => {
   const client = getSupabaseClient();
   if (!client) {
-    throw new Error('Supabase client is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+    throw new Error(
+      'Supabase client is not configured. Provide VITE_SUPABASE_* or NEXT_PUBLIC_SUPABASE_* environment variables.'
+    );
   }
 
   const { data, error } = await client.from('posts').select('*').eq('id', postId).maybeSingle();
@@ -154,7 +160,9 @@ const generateId = () => {
 const ensureClient = () => {
   const client = getSupabaseClient();
   if (!client) {
-    throw new Error('Supabase client is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+    throw new Error(
+      'Supabase client is not configured. Provide VITE_SUPABASE_* or NEXT_PUBLIC_SUPABASE_* environment variables.'
+    );
   }
   return client;
 };

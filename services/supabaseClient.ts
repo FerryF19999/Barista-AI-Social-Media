@@ -6,7 +6,9 @@ let cachedClient: SupabaseClient | null = null;
 const createSupabaseClient = (): SupabaseClient | null => {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     if (typeof window !== 'undefined') {
-      console.warn('Supabase environment variables are missing. Realtime sync is disabled.');
+      console.warn(
+        'Supabase environment variables are missing. Set VITE_SUPABASE_* or NEXT_PUBLIC_SUPABASE_* values to enable realtime sync.'
+      );
     }
     return null;
   }
