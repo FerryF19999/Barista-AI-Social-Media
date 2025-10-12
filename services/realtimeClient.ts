@@ -1,6 +1,5 @@
 import type { Post, User } from '../types';
 import { api } from './api';
-import { getSupabaseClient } from './supabaseClient';
 
 export type EventType = 'USERS_UPDATED' | 'POSTS_UPDATED';
 
@@ -11,37 +10,12 @@ type EventPayloads = {
   POSTS_UPDATED: Post[];
 };
 
+const POLL_INTERVAL_MS = 4000;
+
 class RealtimeClient {
   private listeners: Map<EventType, Set<Listener<any>>> = new Map();
-  private initialized = false;
-  private pendingUsersFetch: Promise<void> | null = null;
-  private pendingPostsFetch: Promise<void> | null = null;
-
-  private async ensureSubscription() {
-    if (this.initialized) {
-      return;
-    }
-
-    const client = getSupabaseClient();
-    if (!client || typeof window === 'undefined') {
-      return;
-    }
-
-    const channel = client.channel('barista-realtime');
-
-    channel
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
-        this.queueUsersDispatch();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => {
-        this.queuePostsDispatch();
-      })
-      .subscribe(status => {
-        if (status === 'SUBSCRIBED') {
-          this.initialized = true;
-        }
-      });
-  }
+  private timers: Map<EventType, ReturnType<typeof setInterval>> = new Map();
+  private lastPayloads: Map<EventType, string> = new Map();
 
   private emit<T extends EventType>(type: T, payload: EventPayloads[T]) {
     const listeners = this.listeners.get(type);
@@ -58,42 +32,54 @@ class RealtimeClient {
     });
   }
 
-  private queueUsersDispatch() {
-    if (!this.listeners.has('USERS_UPDATED')) {
-      return;
-    }
-
-    if (!this.pendingUsersFetch) {
-      this.pendingUsersFetch = (async () => {
-        try {
-          const users = await api.getUsers();
-          this.emit('USERS_UPDATED', users);
-        } catch (error) {
-          console.error('Failed to refresh users from Supabase', error);
-        } finally {
-          this.pendingUsersFetch = null;
+  private async poll(type: EventType) {
+    try {
+      if (type === 'USERS_UPDATED') {
+        const payload = await api.getUsers();
+        const serialized = JSON.stringify(payload);
+        if (this.lastPayloads.get(type) === serialized) {
+          return;
         }
-      })();
+
+        this.lastPayloads.set(type, serialized);
+        this.emit('USERS_UPDATED', payload);
+        return;
+      }
+
+      const payload = await api.getPosts();
+      const serialized = JSON.stringify(payload);
+      if (this.lastPayloads.get(type) === serialized) {
+        return;
+      }
+
+      this.lastPayloads.set(type, serialized);
+      this.emit('POSTS_UPDATED', payload);
+    } catch (error) {
+      console.error('Failed to refresh data from Supabase', error);
     }
   }
 
-  private queuePostsDispatch() {
-    if (!this.listeners.has('POSTS_UPDATED')) {
+  private ensurePolling(type: EventType) {
+    if (this.timers.has(type)) {
       return;
     }
 
-    if (!this.pendingPostsFetch) {
-      this.pendingPostsFetch = (async () => {
-        try {
-          const posts = await api.getPosts();
-          this.emit('POSTS_UPDATED', posts);
-        } catch (error) {
-          console.error('Failed to refresh posts from Supabase', error);
-        } finally {
-          this.pendingPostsFetch = null;
-        }
-      })();
+    const execute = () => {
+      void this.poll(type);
+    };
+
+    execute();
+    const timer = setInterval(execute, POLL_INTERVAL_MS);
+    this.timers.set(type, timer);
+  }
+
+  private stopPolling(type: EventType) {
+    const timer = this.timers.get(type);
+    if (timer) {
+      clearInterval(timer);
+      this.timers.delete(type);
     }
+    this.lastPayloads.delete(type);
   }
 
   subscribe<T extends EventType>(type: T, listener: Listener<EventPayloads[T]>) {
@@ -104,14 +90,13 @@ class RealtimeClient {
     const listeners = this.listeners.get(type)!;
     listeners.add(listener as Listener<any>);
 
-    this.ensureSubscription().catch(error => {
-      console.error('Failed to start Supabase realtime subscription', error);
-    });
+    this.ensurePolling(type);
 
     return () => {
       listeners.delete(listener as Listener<any>);
       if (listeners.size === 0) {
         this.listeners.delete(type);
+        this.stopPolling(type);
       }
     };
   }

@@ -1,5 +1,5 @@
-import { getSupabaseClient } from './supabaseClient';
 import type { Comment, Post, User } from '../types';
+import { supabaseDelete, supabaseInsert, supabaseSelect, supabaseUpdate } from './supabaseRest';
 
 interface ProfileRow {
   id: string;
@@ -82,25 +82,30 @@ const mapPostRowToPost = (row: PostRow, userMap: Map<string, User>): Post => {
 };
 
 const buildUserMap = async (userIds: string[]): Promise<Map<string, User>> => {
-  const client = getSupabaseClient();
-  if (!client) {
-    throw new Error(
-      'Supabase client is not configured. Provide VITE_SUPABASE_* or NEXT_PUBLIC_SUPABASE_* environment variables.'
-    );
-  }
-
   const uniqueIds = Array.from(new Set(userIds)).filter(Boolean);
   if (uniqueIds.length === 0) {
     return new Map();
   }
 
-  const { data, error } = await client.from('profiles').select('*').in('id', uniqueIds);
+  const { data, error } = await supabaseSelect<ProfileRow[]>(
+    'profiles',
+    {
+      filters: [
+        {
+          type: 'in',
+          column: 'id',
+          values: uniqueIds,
+        },
+      ],
+    }
+  );
+
   if (error) {
     throw new Error(error.message);
   }
 
   const map = new Map<string, User>();
-  (data as ProfileRow[]).forEach(row => {
+  (data ?? []).forEach(row => {
     map.set(row.id, mapProfileRowToUser(row));
   });
 
@@ -108,13 +113,6 @@ const buildUserMap = async (userIds: string[]): Promise<Map<string, User>> => {
 };
 
 const transformPostRows = async (rows: PostRow[]): Promise<Post[]> => {
-  const client = getSupabaseClient();
-  if (!client) {
-    throw new Error(
-      'Supabase client is not configured. Provide VITE_SUPABASE_* or NEXT_PUBLIC_SUPABASE_* environment variables.'
-    );
-  }
-
   if (rows.length === 0) {
     return [];
   }
@@ -130,14 +128,17 @@ const transformPostRows = async (rows: PostRow[]): Promise<Post[]> => {
 };
 
 const getPostById = async (postId: string): Promise<Post> => {
-  const client = getSupabaseClient();
-  if (!client) {
-    throw new Error(
-      'Supabase client is not configured. Provide VITE_SUPABASE_* or NEXT_PUBLIC_SUPABASE_* environment variables.'
-    );
-  }
+  const { data, error } = await supabaseSelect<PostRow>('posts', {
+    filters: [
+      {
+        type: 'eq',
+        column: 'id',
+        value: postId,
+      },
+    ],
+    mode: 'maybeSingle',
+  });
 
-  const { data, error } = await client.from('posts').select('*').eq('id', postId).maybeSingle();
   if (error) {
     throw new Error(error.message);
   }
@@ -146,7 +147,7 @@ const getPostById = async (postId: string): Promise<Post> => {
     throw new Error('Post tidak ditemukan');
   }
 
-  const posts = await transformPostRows([data as PostRow]);
+  const posts = await transformPostRows([data]);
   return posts[0];
 };
 
@@ -157,33 +158,36 @@ const generateId = () => {
   return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
 
-const ensureClient = () => {
-  const client = getSupabaseClient();
-  if (!client) {
-    throw new Error(
-      'Supabase client is not configured. Provide VITE_SUPABASE_* or NEXT_PUBLIC_SUPABASE_* environment variables.'
-    );
-  }
-  return client;
-};
-
 export const api = {
   getUsers: async (): Promise<User[]> => {
-    const client = ensureClient();
-    const { data, error } = await client.from('profiles').select('*').order('name', { ascending: true });
+    const { data, error } = await supabaseSelect<ProfileRow[]>(
+      'profiles',
+      {
+        orderBy: { column: 'name', ascending: true },
+      }
+    );
+
     if (error) {
       throw new Error(error.message);
     }
-    return (data as ProfileRow[]).map(mapProfileRowToUser);
+
+    return (data ?? []).map(mapProfileRowToUser);
   },
   signup: async (email: string, password: string) => {
-    const client = ensureClient();
-
-    const { data: existing, error: existingError } = await client
-      .from('profiles')
-      .select('id')
-      .eq('email', email)
-      .maybeSingle();
+    const { data: existing, error: existingError } = await supabaseSelect<Pick<ProfileRow, 'id'>>(
+      'profiles',
+      {
+        columns: 'id',
+        filters: [
+          {
+            type: 'eq',
+            column: 'email',
+            value: email,
+          },
+        ],
+        mode: 'maybeSingle',
+      }
+    );
 
     if (existingError) {
       throw new Error(existingError.message);
@@ -196,20 +200,16 @@ export const api = {
     const id = generateId();
     const name = email.split('@')[0];
 
-    const { data, error } = await client
-      .from('profiles')
-      .insert({
-        id,
-        email,
-        password,
-        name,
-        avatar_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`,
-        bio: '',
-        following: [],
-        followers: [],
-      })
-      .select()
-      .single();
+    const { data, error } = await supabaseInsert<ProfileRow>('profiles', {
+      id,
+      email,
+      password,
+      name,
+      avatar_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`,
+      bio: '',
+      following: [],
+      followers: [],
+    });
 
     if (error) {
       throw new Error(error.message);
@@ -219,13 +219,16 @@ export const api = {
     return { success: true, user };
   },
   login: async (email: string, password: string) => {
-    const client = ensureClient();
-
-    const { data, error } = await client
-      .from('profiles')
-      .select('*')
-      .eq('email', email)
-      .maybeSingle();
+    const { data, error } = await supabaseSelect<ProfileRow>('profiles', {
+      filters: [
+        {
+          type: 'eq',
+          column: 'email',
+          value: email,
+        },
+      ],
+      mode: 'maybeSingle',
+    });
 
     if (error) {
       throw new Error(error.message);
@@ -235,16 +238,14 @@ export const api = {
       return { success: false, message: 'Email atau kata sandi salah.' };
     }
 
-    const row = data as ProfileRow;
-    if (row.password !== password) {
+    if (data.password !== password) {
       return { success: false, message: 'Email atau kata sandi salah.' };
     }
 
-    const user = mapProfileRowToUser(row);
+    const user = mapProfileRowToUser(data);
     return { success: true, user };
   },
   updateUser: async (userId: string, data: Partial<User>) => {
-    const client = ensureClient();
     const payload: Record<string, unknown> = {};
 
     if (data.name !== undefined) payload.name = data.name;
@@ -253,31 +254,61 @@ export const api = {
     if (data.following !== undefined) payload.following = data.following;
     if (data.followers !== undefined) payload.followers = data.followers;
 
-    const { error } = await client.from('profiles').update(payload).eq('id', userId);
+    const { error } = await supabaseUpdate('profiles', payload, {
+      filters: [
+        {
+          type: 'eq',
+          column: 'id',
+          value: userId,
+        },
+      ],
+    });
+
     if (error) {
       throw new Error(error.message);
     }
 
-    const { data: updated, error: fetchError } = await client.from('profiles').select('*').eq('id', userId).single();
+    const { data: updated, error: fetchError } = await supabaseSelect<ProfileRow>('profiles', {
+      filters: [
+        {
+          type: 'eq',
+          column: 'id',
+          value: userId,
+        },
+      ],
+      mode: 'maybeSingle',
+    });
+
     if (fetchError) {
       throw new Error(fetchError.message);
     }
 
-    return { success: true, user: mapProfileRowToUser(updated as ProfileRow) };
+    if (!updated) {
+      throw new Error('Pengguna tidak ditemukan');
+    }
+
+    return { success: true, user: mapProfileRowToUser(updated) };
   },
   toggleFollow: async (userId: string, targetUserId: string) => {
-    const client = ensureClient();
-
-    const { data, error } = await client
-      .from('profiles')
-      .select('id, following, followers')
-      .in('id', [userId, targetUserId]);
+    const { data, error } = await supabaseSelect<Pick<ProfileRow, 'id' | 'following' | 'followers'>[]>(
+      'profiles',
+      {
+        columns: 'id, following, followers',
+        filters: [
+          {
+            type: 'in',
+            column: 'id',
+            values: [userId, targetUserId],
+          },
+        ],
+      }
+    );
 
     if (error) {
       throw new Error(error.message);
     }
 
-    const rows = data as Pick<ProfileRow, 'id' | 'following' | 'followers'>[];
+    const rows = data ?? [];
     const currentUser = rows.find(row => row.id === userId);
     const targetUser = rows.find(row => row.id === targetUserId);
 
@@ -297,12 +328,19 @@ export const api = {
       ? followers.filter(id => id !== userId)
       : [...followers, userId];
 
-    const updates = [
-      client.from('profiles').update({ following: updatedFollowing }).eq('id', userId),
-      client.from('profiles').update({ followers: updatedFollowers }).eq('id', targetUserId),
-    ];
+    const results = await Promise.all([
+      supabaseUpdate('profiles', { following: updatedFollowing }, {
+        filters: [
+          { type: 'eq', column: 'id', value: userId },
+        ],
+      }),
+      supabaseUpdate('profiles', { followers: updatedFollowers }, {
+        filters: [
+          { type: 'eq', column: 'id', value: targetUserId },
+        ],
+      }),
+    ]);
 
-    const results = await Promise.all(updates);
     const failed = results.find(result => result.error);
     if (failed && failed.error) {
       throw new Error(failed.error.message);
@@ -312,16 +350,21 @@ export const api = {
     return { success: true, users };
   },
   getPosts: async (): Promise<Post[]> => {
-    const client = ensureClient();
-    const { data, error } = await client.from('posts').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabaseSelect<PostRow[]>(
+      'posts',
+      {
+        orderBy: { column: 'created_at', ascending: false },
+      }
+    );
+
     if (error) {
       throw new Error(error.message);
     }
-    return transformPostRows((data as PostRow[]) ?? []);
+
+    return transformPostRows(data ?? []);
   },
   createPost: async (data: { authorId: string; imageUrl: string; caption: string; locationTag: string }) => {
-    const client = ensureClient();
-    const row = {
+    const row: PostRow = {
       id: generateId(),
       author_id: data.authorId,
       image_url: data.imageUrl,
@@ -331,9 +374,11 @@ export const api = {
       is_bookmarked: false,
       comments: [],
       views: [],
+      created_at: new Date().toISOString(),
     };
 
-    const { data: inserted, error } = await client.from('posts').insert(row).select().single();
+    const { data: inserted, error } = await supabaseInsert<PostRow>('posts', row);
+
     if (error) {
       throw new Error(error.message);
     }
@@ -342,12 +387,16 @@ export const api = {
     return { success: true, post: posts[0] };
   },
   updatePost: async (postId: string, data: { caption?: string; locationTag?: string }) => {
-    const client = ensureClient();
     const payload: Record<string, unknown> = {};
     if (data.caption !== undefined) payload.caption = data.caption;
     if (data.locationTag !== undefined) payload.location_tag = data.locationTag;
 
-    const { error } = await client.from('posts').update(payload).eq('id', postId);
+    const { error } = await supabaseUpdate('posts', payload, {
+      filters: [
+        { type: 'eq', column: 'id', value: postId },
+      ],
+    });
+
     if (error) {
       throw new Error(error.message);
     }
@@ -356,26 +405,41 @@ export const api = {
     return { success: true, post };
   },
   deletePost: async (postId: string) => {
-    const client = ensureClient();
-    const { error } = await client.from('posts').delete().eq('id', postId);
+    const { error } = await supabaseDelete('posts', {
+      filters: [
+        { type: 'eq', column: 'id', value: postId },
+      ],
+    });
+
     if (error) {
       throw new Error(error.message);
     }
+
     return { success: true };
   },
   toggleLike: async (postId: string, userId: string) => {
-    const client = ensureClient();
+    const { data, error } = await supabaseSelect<Pick<PostRow, 'likes'>>('posts', {
+      columns: 'likes',
+      filters: [
+        { type: 'eq', column: 'id', value: postId },
+      ],
+      mode: 'maybeSingle',
+    });
 
-    const { data, error } = await client.from('posts').select('likes').eq('id', postId).maybeSingle();
     if (error) {
       throw new Error(error.message);
     }
 
-    const likes = ((data as Pick<PostRow, 'likes'> | null)?.likes ?? []).filter(Boolean);
+    const likes = (data?.likes ?? []).filter(Boolean);
     const hasLiked = likes.includes(userId);
     const updatedLikes = hasLiked ? likes.filter(id => id !== userId) : [...likes, userId];
 
-    const { error: updateError } = await client.from('posts').update({ likes: updatedLikes }).eq('id', postId);
+    const { error: updateError } = await supabaseUpdate('posts', { likes: updatedLikes }, {
+      filters: [
+        { type: 'eq', column: 'id', value: postId },
+      ],
+    });
+
     if (updateError) {
       throw new Error(updateError.message);
     }
@@ -384,24 +448,25 @@ export const api = {
     return { success: true, post };
   },
   toggleBookmark: async (postId: string) => {
-    const client = ensureClient();
-
-    const { data, error } = await client
-      .from('posts')
-      .select('is_bookmarked')
-      .eq('id', postId)
-      .maybeSingle();
+    const { data, error } = await supabaseSelect<Pick<PostRow, 'is_bookmarked'>>('posts', {
+      columns: 'is_bookmarked',
+      filters: [
+        { type: 'eq', column: 'id', value: postId },
+      ],
+      mode: 'maybeSingle',
+    });
 
     if (error) {
       throw new Error(error.message);
     }
 
-    const isBookmarked = Boolean((data as Pick<PostRow, 'is_bookmarked'> | null)?.is_bookmarked);
+    const isBookmarked = Boolean(data?.is_bookmarked);
 
-    const { error: updateError } = await client
-      .from('posts')
-      .update({ is_bookmarked: !isBookmarked })
-      .eq('id', postId);
+    const { error: updateError } = await supabaseUpdate('posts', { is_bookmarked: !isBookmarked }, {
+      filters: [
+        { type: 'eq', column: 'id', value: postId },
+      ],
+    });
 
     if (updateError) {
       throw new Error(updateError.message);
@@ -411,17 +476,28 @@ export const api = {
     return { success: true, post };
   },
   incrementView: async (postId: string, userId: string) => {
-    const client = ensureClient();
+    const { data, error } = await supabaseSelect<Pick<PostRow, 'views'>>('posts', {
+      columns: 'views',
+      filters: [
+        { type: 'eq', column: 'id', value: postId },
+      ],
+      mode: 'maybeSingle',
+    });
 
-    const { data, error } = await client.from('posts').select('views').eq('id', postId).maybeSingle();
     if (error) {
       throw new Error(error.message);
     }
 
-    const views = ((data as Pick<PostRow, 'views'> | null)?.views ?? []).filter(Boolean);
+    const views = (data?.views ?? []).filter(Boolean);
+
     if (!views.includes(userId)) {
       views.push(userId);
-      const { error: updateError } = await client.from('posts').update({ views }).eq('id', postId);
+      const { error: updateError } = await supabaseUpdate('posts', { views }, {
+        filters: [
+          { type: 'eq', column: 'id', value: postId },
+        ],
+      });
+
       if (updateError) {
         throw new Error(updateError.message);
       }
@@ -431,14 +507,19 @@ export const api = {
     return { success: true, post };
   },
   addComment: async (postId: string, userId: string, text: string) => {
-    const client = ensureClient();
+    const { data, error } = await supabaseSelect<Pick<PostRow, 'comments'>>('posts', {
+      columns: 'comments',
+      filters: [
+        { type: 'eq', column: 'id', value: postId },
+      ],
+      mode: 'maybeSingle',
+    });
 
-    const { data, error } = await client.from('posts').select('comments').eq('id', postId).maybeSingle();
     if (error) {
       throw new Error(error.message);
     }
 
-    const comments = ((data as Pick<PostRow, 'comments'> | null)?.comments ?? []) as CommentRow[];
+    const comments = (data?.comments ?? []) as CommentRow[];
     const comment: CommentRow = {
       id: generateId(),
       text,
@@ -448,7 +529,12 @@ export const api = {
 
     const updatedComments = [...comments, comment];
 
-    const { error: updateError } = await client.from('posts').update({ comments: updatedComments }).eq('id', postId);
+    const { error: updateError } = await supabaseUpdate('posts', { comments: updatedComments }, {
+      filters: [
+        { type: 'eq', column: 'id', value: postId },
+      ],
+    });
+
     if (updateError) {
       throw new Error(updateError.message);
     }
