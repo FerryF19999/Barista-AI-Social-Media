@@ -2,6 +2,7 @@ import React, { createContext, useState, useEffect, ReactNode } from 'react';
 import { User } from '../types';
 import { api } from '../services/api';
 import { realtimeClient } from '../services/realtimeClient';
+import { fallbackSeeds } from '../services/fallbackStore';
 
 interface AuthContextType {
   user: User | null;
@@ -19,12 +20,7 @@ export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 const AUTH_USER_KEY = 'authUser';
 
-const getInitialUsers = (): User[] => {
-    const user1: User = { id: 'user-123', name: 'KopiLover', avatarUrl: 'https://images.pexels.com/photos/1844547/pexels-photo-1844547.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&dpr=1', email: 'goresf19@gmail.com', bio: 'Pecinta kopi dan senja.', following: ['user-456'], followers: ['user-456'] };
-    const user2: User = { id: 'user-456', name: 'Andi Pratama', avatarUrl: 'https://images.pexels.com/photos/837358/pexels-photo-837358.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&dpr=1', email: 'andi@example.com', bio: 'Barista & Roaster.', following: ['user-123'], followers: ['user-123'] };
-    const user3: User = { id: 'user-789', name: 'CoffeeAddict', avatarUrl: 'https://images.pexels.com/photos/842980/pexels-photo-842980.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&dpr=1', email: 'addict@example.com', bio: 'Exploring beans.', following: [], followers: [] };
-    return [user1, user2, user3];
-};
+const getInitialUsers = (): User[] => fallbackSeeds.getUsers();
 
 const areArraysEqual = (a: string[], b: string[]) => {
   if (a.length !== b.length) return false;
