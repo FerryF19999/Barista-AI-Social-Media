@@ -85,3 +85,26 @@ View your app in AI Studio: https://ai.studio/apps/drive/15FPnpECp6G1ENImCKFUVJk
    _Tip:_ enable Realtime for the `profiles` and `posts` tables so every mutation is pushed instantly to all connected clients.
 
 4. Run the app: `npm run dev`
+
+## Troubleshooting
+
+### "fatal: No configured push destination" when creating a PR
+
+This repo runs inside a disposable environment that does not come with a remote
+configured by default. If you try to run `git push` (or open a pull request)
+without first adding a remote, Git will abort with the following error message:
+
+```
+fatal: No configured push destination.
+```
+
+To resolve the issue, point the local repository at your Supabase app's GitHub
+project (or any other remote) before pushing:
+
+```bash
+git remote add origin https://github.com/<your-org>/<your-repo>.git
+git push -u origin work
+```
+
+Once the remote is configured you can push normally and open a pull request in
+your Git hosting provider.
