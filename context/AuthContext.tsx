@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect, ReactNode } from 'react';
 import { User } from '../types';
+import useSyncedLocalStorage from '../hooks/useSyncedLocalStorage';
 
 interface AuthContextType {
   user: User | null;
@@ -24,17 +25,14 @@ const getInitialUsers = (): User[] => {
     const user2: User = { id: 'user-456', name: 'Andi Pratama', avatarUrl: 'https://images.pexels.com/photos/837358/pexels-photo-837358.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&dpr=1', email: 'andi@example.com', bio: 'Barista & Roaster.', following: [], followers: [] };
     const user3: User = { id: 'user-789', name: 'CoffeeAddict', avatarUrl: 'https://images.pexels.com/photos/842980/pexels-photo-842980.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&dpr=1', email: 'addict@example.com', bio: 'Exploring beans.', following: [], followers: [] };
     
-    try {
-        const stored = localStorage.getItem(MOCK_USERS_DB_KEY);
-        if (stored) return JSON.parse(stored);
-    } catch (e) { console.error(e); }
-    
+    // The useSyncedLocalStorage hook will handle reading from storage,
+    // so this function now only provides the initial fallback data.
     return [user1, user2, user3];
 };
 
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [users, setUsers] = useState<User[]>(getInitialUsers);
+  const [users, setUsers] = useSyncedLocalStorage<User[]>(MOCK_USERS_DB_KEY, getInitialUsers);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -44,20 +42,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const storedUser = localStorage.getItem(AUTH_USER_KEY);
         if (storedUser) {
           const parsedUser = JSON.parse(storedUser);
-          if (!parsedUser.following) parsedUser.following = [];
-          if (!parsedUser.followers) parsedUser.followers = [];
-          setUser(parsedUser);
+          // Ensure user object from auth key is in sync with the main user list
+          const syncedUser = users.find(u => u.id === parsedUser.id) || parsedUser;
+          if (!syncedUser.following) syncedUser.following = [];
+          if (!syncedUser.followers) syncedUser.followers = [];
+          setUser(syncedUser);
         }
       } catch (error) {
         console.error("Failed to parse user from localStorage", error);
       }
       setLoading(false);
     }, 1000);
-  }, []);
+  }, [users]); // Depend on users to re-sync on cross-tab updates
 
-  useEffect(() => {
-    localStorage.setItem(MOCK_USERS_DB_KEY, JSON.stringify(users));
-  }, [users]);
 
   const signup = async (email: string, password: string): Promise<{ success: boolean; message?: string }> => {
     return new Promise((resolve) => {
@@ -136,8 +133,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 ? u.following.filter(id => id !== targetUserId)
                 : [...u.following, targetUserId];
              const updatedUser = { ...user, following: updatedFollowing };
-             setUser(updatedUser);
-             localStorage.setItem(AUTH_USER_KEY, JSON.stringify(updatedUser));
+             setUser(updatedUser); // Update local active user state immediately
+             localStorage.setItem(AUTH_USER_KEY, JSON.stringify(updatedUser)); // Persist active user change
              return updatedUser;
         }
         if (u.id === targetUserId) {

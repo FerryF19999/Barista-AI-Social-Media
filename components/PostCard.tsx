@@ -109,9 +109,16 @@ const PostCard: React.FC<PostCardProps> = ({ post, onEdit }) => {
       {/* Post Actions */}
       <div className="flex justify-between items-center p-3">
         <div className="flex space-x-4 items-center">
-            <button onClick={() => toggleLike && toggleLike(post.id)} className="flex items-center space-x-1.5 group">
-                 <HeartIcon solid={isLikedByUser} className={`w-7 h-7 transition-colors group-hover:text-red-500 ${isLikedByUser ? 'text-red-500' : 'text-stone-600'}`} />
-            </button>
+            <div className="flex items-center space-x-2">
+                <button onClick={() => toggleLike && toggleLike(post.id)} className="flex items-center group">
+                    <HeartIcon solid={isLikedByUser} className={`w-7 h-7 transition-colors group-hover:text-red-500 ${isLikedByUser ? 'text-red-500' : 'text-stone-600'}`} />
+                </button>
+                {post.likes.length > 0 && (
+                  <span className="font-bold text-sm text-stone-800 select-none">
+                    {post.likes.length.toLocaleString()} suka
+                  </span>
+                )}
+            </div>
             <button onClick={() => commentInputRef.current?.focus()} className="flex items-center space-x-1.5 group">
                 <ChatBubbleIcon className="w-7 h-7 text-stone-600 group-hover:text-stone-800" />
             </button>
@@ -123,9 +130,6 @@ const PostCard: React.FC<PostCardProps> = ({ post, onEdit }) => {
 
       {/* Post Details */}
       <div className="px-3 pb-4">
-         {post.likes.length > 0 && (
-             <p className="font-bold text-sm text-stone-800 mb-1">{post.likes.length.toLocaleString()} suka</p>
-         )}
          <p className="text-sm text-stone-800">
             <Link to={`/profile/${post.author.id}`} className="font-bold mr-2 hover:underline">{post.author.name}</Link>
             {post.caption}
