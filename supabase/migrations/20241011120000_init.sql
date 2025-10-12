@@ -1,5 +1,9 @@
--- Supabase migration for Barista AI Social Media app
--- Creates the profiles and posts tables plus associated policies
+--
+-- ⚠️ Do not paste shell commands such as
+--     `npx supabase db push --file supabase/migrations/20241011120000_init.sql`
+-- into the Supabase SQL editor. This file contains the SQL statements that the
+-- command would execute for you—copy the statements below or run the CLI/
+-- `npm run supabase:migrate` task from a terminal instead.
 
 create schema if not exists public;
 

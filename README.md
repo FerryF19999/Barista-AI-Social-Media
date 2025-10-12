@@ -142,3 +142,27 @@ git push -u origin work
 
 Once the remote is configured you can push normally and open a pull request in
 your Git hosting provider.
+
+### "syntax error at or near \"npx\"" when running a migration
+
+If the Supabase dashboard reports an error similar to:
+
+```
+ERROR: 42601: syntax error at or near "npx"
+```
+
+it means the SQL editor attempted to execute a shell command (for example,
+`npx supabase db push --file supabase/migrations/20241011120000_init.sql`). The
+editor only accepts SQL statements, so commands that belong in a terminal are
+rejected.
+
+To fix the issue, either:
+
+- Run the CLI script from a terminal instead: `SUPABASE_DB_URL=... npm run
+  supabase:migrate`, or
+- Open `supabase/migrations/20241011120000_init.sql`, copy the SQL statements
+  inside, and paste those statements—not the `npx` command—into the Supabase SQL
+  editor.
+
+Either approach will provision the `profiles` and `posts` tables without the
+syntax error.
