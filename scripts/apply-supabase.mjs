@@ -28,7 +28,13 @@ if (!ACTION_MAP[action]) {
   process.exit();
 }
 
-const DB_URL_KEYS = ['SUPABASE_DB_URL', 'DATABASE_URL'];
+const DB_URL_KEYS = [
+  'SUPABASE_DB_URL',
+  'SUPABASE_DB_DIRECT_URL',
+  'SUPABASE_DIRECT_URL',
+  'SUPABASE_CONNECTION_STRING',
+  'DATABASE_URL',
+];
 const DOTENV_CANDIDATES = [
   path.resolve(process.cwd(), '.env.local'),
   path.resolve(process.cwd(), '.env.development.local'),
@@ -115,7 +121,7 @@ const promptForConnectionString = async () => {
   }
 
   console.log(
-    'Paste the Supabase database connection string (Project Settings → Database → Connection string → URI).'
+    'Paste the Supabase database connection string (Project Settings → Database → Connection string → Direct connection → URI).'
   );
 
   const rl = createInterface({ input, output });
@@ -157,6 +163,16 @@ if (!resolvedConnection?.value) {
 }
 
 const { value: connectionString, source: connectionSource } = resolvedConnection;
+
+const PLACEHOLDER_PATTERNS = [/\[YOUR-PASSWORD\]/i, /<YOUR-PASSWORD>/i, /\{YOUR-PASSWORD\}/i];
+
+if (PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(connectionString))) {
+  console.error(
+    'The Supabase connection string still contains a password placeholder. Replace [YOUR-PASSWORD] with the actual database password from the project settings.'
+  );
+  process.exitCode = 1;
+  process.exit();
+}
 
 if (connectionSource && connectionSource !== 'environment variable') {
   console.log(`Using Supabase connection string from ${connectionSource}.`);

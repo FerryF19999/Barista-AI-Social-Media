@@ -32,16 +32,24 @@ View your app in AI Studio: https://ai.studio/apps/drive/15FPnpECp6G1ENImCKFUVJk
 
    For automated migrations you will also need the database connection string
    from your Supabase project's settings (labeled **Connection string** under
-   the **Project Settings → Database** page). Export it as `SUPABASE_DB_URL` or
-   `DATABASE_URL` before running the migration/seed scripts below.
+   the **Project Settings → Database** page). Export it as `SUPABASE_DB_URL`,
+   `SUPABASE_DB_DIRECT_URL`, `SUPABASE_CONNECTION_STRING`, or `DATABASE_URL`
+   before running the migration/seed scripts below. Supabase lists multiple
+   connection string variants—use the **Direct connection** URI when applying
+   migrations.
 
 3. Provision the required tables inside Supabase. Run `npm run
    supabase:migrate` and paste the database connection string (from **Project
-   Settings → Database → Connection string → URI**) when prompted. The helper
-   remembers the value by writing `SUPABASE_DB_URL=...` to `.env.local` so
+   Settings → Database → Connection string → Direct connection → URI**) when
+   prompted. The helper remembers the value by writing `SUPABASE_DB_URL=...` to `.env.local` so
    subsequent runs can be non-interactive. If you already exported
    `SUPABASE_DB_URL`/`DATABASE_URL` in your shell, the script will use that
    instead and skip the prompt.
+
+   > ⚠️ The connection string copied from the dashboard contains a
+   > `[YOUR-PASSWORD]` placeholder. Replace it with the actual database password
+   > shown on the same page before running the script; otherwise the helper will
+   > refuse to connect.
 
    ```bash
    npm run supabase:migrate
