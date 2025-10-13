@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "supabase:migrate": "node scripts/apply-supabase.mjs migrate",
     "supabase:seed": "node scripts/apply-supabase.mjs seed",
-    "supabase:setup": "node scripts/apply-supabase.mjs all"
+    "supabase:setup": "node scripts/apply-supabase.mjs all",
+    "supabase:check": "node scripts/check-supabase-rest.mjs"
   },
   "dependencies": {
     "react": "^19.2.0",

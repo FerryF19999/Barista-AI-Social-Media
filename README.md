@@ -61,7 +61,19 @@ View your app in AI Studio: https://ai.studio/apps/drive/15FPnpECp6G1ENImCKFUVJk
    expects. If you prefer to perform the steps manually, open the file and
    paste its contents into the Supabase SQL Editor.
 
-4. (Optional) Seed Supabase with the same mock data used by the local fallback
+4. Confirm that your environment variables allow the frontend to reach the
+   Supabase REST API:
+
+   ```bash
+   npm run supabase:check
+   ```
+
+   The checker reuses the values from `.env.local` (or your shell) to call the
+   `profiles` endpoint. If the table has not been created yet it will prompt you
+   to run the migration first; otherwise you should see a success message and
+   can proceed to insert data via `npm run supabase:seed` or the app UI.
+
+5. (Optional) Seed Supabase with the same mock data used by the local fallback
    store so the UI has content immediately:
 
    ```bash
@@ -73,10 +85,10 @@ View your app in AI Studio: https://ai.studio/apps/drive/15FPnpECp6G1ENImCKFUVJk
    To run the migration and seed together, execute `npm run supabase:setup` with
    the same saved connection string (or environment variable).
 
-5. Enable Realtime for the `profiles` and `posts` tables so every mutation is
+6. Enable Realtime for the `profiles` and `posts` tables so every mutation is
    pushed instantly to all connected clients.
 
-6. Run the app: `npm run dev`
+7. Run the app: `npm run dev`
 
 ### Next.js Supabase sample
 
