@@ -9,7 +9,7 @@ create schema if not exists public;
 
 create table if not exists public.profiles (
   id text primary key,
-  email text unique not null,
+  email_address text unique not null,
   password text,
   name text,
   avatar_url text,

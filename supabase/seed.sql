@@ -1,6 +1,6 @@
 -- Seed data to mirror the local fallback store so the UI has content immediately
 
-insert into public.profiles (id, email, password, name, avatar_url, bio, following, followers)
+insert into public.profiles (id, email_address, password, name, avatar_url, bio, following, followers)
 values
   ('user-123', 'goresf19@gmail.com', 'password123', 'KopiLover',
    'https://images.pexels.com/photos/1844547/pexels-photo-1844547.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&dpr=1',
@@ -12,7 +12,7 @@ values
    'https://images.pexels.com/photos/842980/pexels-photo-842980.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&dpr=1',
    'Exploring beans.', ARRAY[]::text[], ARRAY[]::text[])
   on conflict (id) do update
-  set email = excluded.email,
+  set email_address = excluded.email_address,
       password = excluded.password,
       name = excluded.name,
       avatar_url = excluded.avatar_url,

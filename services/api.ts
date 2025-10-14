@@ -3,7 +3,7 @@ import { supabaseDelete, supabaseInsert, supabaseSelect, supabaseUpdate } from '
 
 interface ProfileRow {
   id: string;
-  email: string;
+  email_address: string;
   name: string | null;
   avatar_url: string | null;
   bio: string | null;
@@ -43,11 +43,11 @@ const createPlaceholderUser = (id: string): User => ({
 });
 
 const mapProfileRowToUser = (row: ProfileRow): User => {
-  const name = row.name ?? row.email.split('@')[0] ?? 'Pengguna';
+  const name = row.name ?? row.email_address.split('@')[0] ?? 'Pengguna';
   return {
     id: row.id,
     name,
-    email: row.email,
+    email: row.email_address,
     avatarUrl: row.avatar_url ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`,
     bio: row.bio ?? undefined,
     following: row.following ?? [],
@@ -194,7 +194,7 @@ export const api = {
           filters: [
             {
               type: 'eq',
-              column: 'email',
+              column: 'email_address',
               value: email,
             },
           ],
@@ -215,7 +215,7 @@ export const api = {
 
       const { data, error } = await supabaseInsert<ProfileRow>('profiles', {
         id,
-        email,
+        email_address: email,
         password,
         name,
         avatar_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`,
@@ -237,7 +237,7 @@ export const api = {
         filters: [
           {
             type: 'eq',
-            column: 'email',
+            column: 'email_address',
             value: email,
           },
         ],
