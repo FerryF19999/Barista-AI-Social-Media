@@ -35,19 +35,22 @@ const AddPostPage: React.FC = () => {
         }
     };
     
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!postContext || !caption || !locationTag || !selectedImageUrl) {
             return;
         }
 
-        postContext.addPost({
-            imageUrl: selectedImageUrl,
-            caption,
-            locationTag
-        });
-        
-        navigate('/feed');
+        try {
+            await postContext.addPost({
+                imageUrl: selectedImageUrl,
+                caption,
+                locationTag
+            });
+            navigate('/feed');
+        } catch (error) {
+            console.error('Failed to add post', error);
+        }
     };
 
     const isFormValid = caption.trim() !== '' && locationTag.trim() !== '' && selectedImageUrl;
