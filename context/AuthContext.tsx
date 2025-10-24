@@ -35,25 +35,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [users, setUsers] = useSyncedLocalStorage<User[]>(MOCK_USERS_DB_KEY, getInitialUsers);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
 
   useEffect(() => {
-    setTimeout(() => {
-      try {
-        const storedUser = localStorage.getItem(AUTH_USER_KEY);
-        if (storedUser) {
-          const parsedUser = JSON.parse(storedUser);
-          // Ensure user object from auth key is in sync with the main user list
-          const syncedUser = users.find(u => u.id === parsedUser.id) || parsedUser;
-          if (!syncedUser.following) syncedUser.following = [];
-          if (!syncedUser.followers) syncedUser.followers = [];
-          setUser(syncedUser);
-        }
-      } catch (error) {
-        console.error("Failed to parse user from localStorage", error);
+    try {
+      const storedUser = localStorage.getItem(AUTH_USER_KEY);
+      if (storedUser) {
+        const parsedUser = JSON.parse(storedUser);
+        // Ensure user object from auth key is in sync with the main user list
+        const syncedUser = users.find(u => u.id === parsedUser.id) || parsedUser;
+        if (!syncedUser.following) syncedUser.following = [];
+        if (!syncedUser.followers) syncedUser.followers = [];
+        setUser(syncedUser);
       }
+    } catch (error) {
+      console.error("Failed to parse user from localStorage", error);
+    }
+    
+    if (!initialLoadDone) {
       setLoading(false);
-    }, 1000);
-  }, [users]); // Depend on users to re-sync on cross-tab updates
+      setInitialLoadDone(true);
+    }
+  }, [users, initialLoadDone]); // Re-sync when users update, but only set loading false once
 
 
   const signup = async (email: string, password: string): Promise<{ success: boolean; message?: string }> => {
