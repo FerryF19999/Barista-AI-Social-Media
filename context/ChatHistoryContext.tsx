@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { ChatMessage, Conversation } from '../types';
 import { AuthContext } from './AuthContext';
 import { generateConversationTitle } from '../services/geminiService';
+import { createDemoConversations } from '../services/demoData';
 
 interface ChatHistoryContextType {
   conversations: Conversation[];
@@ -36,12 +37,22 @@ export const ChatHistoryProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
   const authContext = useContext(AuthContext);
   const user = authContext?.user;
+  const supabaseClient = supabase;
 
   const fetchConversations = useCallback(async () => {
     if (!user) return;
 
+    if (!supabaseClient) {
+      const demoConversations = createDemoConversations();
+      setConversations(demoConversations);
+      if (!activeConversationId && demoConversations.length > 0) {
+        setActiveConversationId(demoConversations[0].id);
+      }
+      return;
+    }
+
     try {
-      const { data: conversationsData, error } = await supabase
+      const { data: conversationsData, error } = await supabaseClient
         .from('conversations')
         .select(`
           *,
@@ -76,30 +87,36 @@ export const ChatHistoryProvider: React.FC<{ children: ReactNode }> = ({ childre
     } catch (error) {
       console.error('Error fetching conversations:', error);
     }
-  }, [user, activeConversationId]);
+  }, [user, activeConversationId, supabaseClient]);
 
   useEffect(() => {
-    if (user) {
-      fetchConversations();
-
-      const channel: RealtimeChannel = supabase
-        .channel('conversations-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations', filter: `user_id=eq.${user.id}` }, () => {
-          fetchConversations();
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' }, () => {
-          fetchConversations();
-        })
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    } else {
+    if (!user) {
       setConversations([]);
       setActiveConversationId(null);
+      return;
     }
-  }, [user, fetchConversations]);
+
+    if (!supabaseClient) {
+      fetchConversations();
+      return;
+    }
+
+    fetchConversations();
+
+    const channel: RealtimeChannel = supabaseClient
+      .channel('conversations-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations', filter: `user_id=eq.${user.id}` }, () => {
+        fetchConversations();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' }, () => {
+        fetchConversations();
+      })
+      .subscribe();
+
+    return () => {
+      supabaseClient.removeChannel(channel);
+    };
+  }, [user, fetchConversations, supabaseClient]);
 
   const activeConversation = conversations.find(c => c.id === activeConversationId);
 
@@ -107,27 +124,38 @@ export const ChatHistoryProvider: React.FC<{ children: ReactNode }> = ({ childre
     if (!user) return;
 
     if (activeConversation && activeConversation.messages.length > 1) {
-      setIsGeneratingTitle(true);
-      try {
-        const title = await generateConversationTitle(activeConversation.messages);
+      if (!supabaseClient) {
+        const updatedTitle = await generateConversationTitle(activeConversation.messages);
+        setConversations(prev => prev.map(conv => (conv.id === activeConversation.id ? { ...conv, title: updatedTitle } : conv)));
+      } else {
+        setIsGeneratingTitle(true);
+        try {
+          const title = await generateConversationTitle(activeConversation.messages);
 
-        await supabase
-          .from('conversations')
-          .update({ title })
-          .eq('id', activeConversation.id);
+          await supabaseClient
+            .from('conversations')
+            .update({ title })
+            .eq('id', activeConversation.id);
 
-        await fetchConversations();
-      } catch (e) {
-        console.error("Failed to set title", e);
-      } finally {
-        setIsGeneratingTitle(false);
+          await fetchConversations();
+        } catch (e) {
+          console.error("Failed to set title", e);
+        } finally {
+          setIsGeneratingTitle(false);
+        }
       }
     }
 
     const newConv = createNewConversation();
 
+    if (!supabaseClient) {
+      setConversations(prev => [newConv, ...prev]);
+      setActiveConversationId(newConv.id);
+      return;
+    }
+
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseClient
         .from('conversations')
         .insert({
           user_id: user.id,
@@ -139,7 +167,7 @@ export const ChatHistoryProvider: React.FC<{ children: ReactNode }> = ({ childre
       if (error) throw error;
 
       if (data) {
-        await supabase
+        await supabaseClient
           .from('chat_messages')
           .insert({
             conversation_id: data.id,
@@ -176,10 +204,21 @@ export const ChatHistoryProvider: React.FC<{ children: ReactNode }> = ({ childre
       !currentConv.messages.some(existingMsg => existingMsg.id === msg.id)
     );
 
+    if (!supabaseClient) {
+      setConversations(prev =>
+        prev.map(conv =>
+          conv.id === activeConversationId
+            ? { ...conv, messages: updatedMessages }
+            : conv
+        )
+      );
+      return;
+    }
+
     try {
       for (const msg of newMessages) {
         if (msg.id.startsWith('temp_') || !msg.isLoading) {
-          await supabase
+          await supabaseClient
             .from('chat_messages')
             .insert({
               conversation_id: activeConversationId,
@@ -191,7 +230,7 @@ export const ChatHistoryProvider: React.FC<{ children: ReactNode }> = ({ childre
         }
       }
 
-      await supabase
+      await supabaseClient
         .from('conversations')
         .update({ updated_at: new Date().toISOString() })
         .eq('id', activeConversationId);

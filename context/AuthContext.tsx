@@ -1,7 +1,7 @@
 import React, { createContext, useState, useEffect, ReactNode } from 'react';
-import { User as AuthUser, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { User } from '../types';
+import { createDemoUsers } from '../services/demoData';
 
 interface AuthContextType {
   user: User | null;
@@ -21,9 +21,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const supabaseClient = supabase;
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    if (!supabaseClient) {
+      const demoUsers = createDemoUsers();
+      setUsers(demoUsers);
+      setUser(demoUsers[0]);
+      setLoading(false);
+      return;
+    }
+
+    supabaseClient.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         loadUserProfile(session.user.id);
       } else {
@@ -31,7 +40,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         loadUserProfile(session.user.id);
       } else {
@@ -46,8 +55,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const loadUserProfile = async (userId: string) => {
+    if (!supabaseClient) return;
+
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseClient
         .from('profiles')
         .select('*')
         .eq('id', userId)
@@ -56,12 +67,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (error) throw error;
 
       if (data) {
-        const { data: followingData } = await supabase
+        const { data: followingData } = await supabaseClient
           .from('follows')
           .select('following_id')
           .eq('follower_id', userId);
 
-        const { data: followersData } = await supabase
+        const { data: followersData } = await supabaseClient
           .from('follows')
           .select('follower_id')
           .eq('following_id', userId);
@@ -86,8 +97,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const loadAllUsers = async () => {
+    if (!supabaseClient) {
+      setUsers(createDemoUsers());
+      return;
+    }
+
     try {
-      const { data: profilesData, error } = await supabase
+      const { data: profilesData, error } = await supabaseClient
         .from('profiles')
         .select('*');
 
@@ -96,12 +112,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (profilesData) {
         const usersWithFollows = await Promise.all(
           profilesData.map(async (profile) => {
-            const { data: followingData } = await supabase
+            const { data: followingData } = await supabaseClient
               .from('follows')
               .select('following_id')
               .eq('follower_id', profile.id);
 
-            const { data: followersData } = await supabase
+            const { data: followersData } = await supabaseClient
               .from('follows')
               .select('follower_id')
               .eq('following_id', profile.id);
@@ -126,8 +142,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const signup = async (email: string, password: string): Promise<{ success: boolean; message?: string }> => {
+    if (!supabaseClient) {
+      return { success: false, message: 'Fitur daftar memerlukan konfigurasi Supabase.' };
+    }
+
     try {
-      const { data: existingUser } = await supabase
+      const { data: existingUser } = await supabaseClient
         .from('profiles')
         .select('email')
         .eq('email', email.toLowerCase())
@@ -137,7 +157,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return { success: false, message: 'Email ini sudah terdaftar. Silakan masuk.' };
       }
 
-      const { data, error } = await supabase.auth.signUp({
+      const { data, error } = await supabaseClient.auth.signUp({
         email,
         password,
       });
@@ -157,8 +177,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const login = async (email: string, password: string): Promise<{ success: boolean; message?: string }> => {
+    if (!supabaseClient) {
+      return { success: false, message: 'Fitur masuk memerlukan konfigurasi Supabase.' };
+    }
+
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabaseClient.auth.signInWithPassword({
         email,
         password,
       });
@@ -177,15 +201,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    if (!supabaseClient) {
+      console.warn('Supabase belum dikonfigurasi. Logout dinonaktifkan dalam mode demo.');
+      return;
+    }
+
+    await supabaseClient.auth.signOut();
     setUser(null);
   };
 
   const updateUser = async (updatedData: Partial<User>) => {
     if (!user) return;
 
+    if (!supabaseClient) {
+      const updatedUser = { ...user, ...updatedData };
+      setUser(updatedUser);
+      setUsers(prev => prev.map(u => (u.id === user.id ? { ...u, ...updatedData } : u)));
+      return;
+    }
+
     try {
-      const { error } = await supabase
+      const { error } = await supabaseClient
         .from('profiles')
         .update({
           name: updatedData.name,
@@ -205,17 +241,53 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const switchUser = async (userId: string) => {
+    if (!supabaseClient) {
+      const targetUser = users.find(u => u.id === userId);
+      if (targetUser) {
+        setUser({ ...targetUser });
+      }
+      return;
+    }
+
     await loadUserProfile(userId);
   };
 
   const toggleFollow = async (targetUserId: string) => {
     if (!user) return;
 
+    if (!supabaseClient) {
+      const isFollowing = user.following.includes(targetUserId);
+      const updatedFollowing = isFollowing
+        ? user.following.filter(id => id !== targetUserId)
+        : [...user.following, targetUserId];
+
+      setUser(prev => (prev ? { ...prev, following: updatedFollowing } : prev));
+      setUsers(prev =>
+        prev.map(u => {
+          if (u.id === user.id) {
+            return { ...u, following: updatedFollowing };
+          }
+
+          if (u.id === targetUserId) {
+            const updatedFollowers = isFollowing
+              ? u.followers.filter(id => id !== user.id)
+              : [...u.followers, user.id];
+
+            return { ...u, followers: updatedFollowers };
+          }
+
+          return u;
+        })
+      );
+
+      return;
+    }
+
     const isFollowing = user.following.includes(targetUserId);
 
     try {
       if (isFollowing) {
-        const { error } = await supabase
+        const { error } = await supabaseClient
           .from('follows')
           .delete()
           .eq('follower_id', user.id)
@@ -223,7 +295,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         if (error) throw error;
       } else {
-        const { error } = await supabase
+        const { error } = await supabaseClient
           .from('follows')
           .insert({
             follower_id: user.id,
