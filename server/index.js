@@ -3,7 +3,8 @@ import cors from 'cors';
 import { GoogleGenAI, Type } from '@google/genai';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.BACKEND_PORT || 3001;
+const HOST = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
 
 app.use(cors());
 app.use(express.json());
@@ -273,6 +274,6 @@ app.post('/api/generate-title', async (req, res) => {
   }
 });
 
-app.listen(PORT, 'localhost', () => {
-  console.log(`Backend server running on http://localhost:${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`Backend server running on http://${HOST}:${PORT}`);
 });
