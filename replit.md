@@ -11,7 +11,7 @@ AI Barista is a Progressive Web App that helps Indonesian coffee lovers discover
 - **Build Configuration**: Removed import maps from index.html to work with Vite bundler
 - **Production Readiness**: Backend now listens on 0.0.0.0 in production for proper deployment
 - **Deployment**: Configured VM deployment to run both backend and frontend processes
-- **Tailwind CSS Production Setup**: Replaced CDN with properly bundled Tailwind CSS v4 for production builds
+- **Tailwind CSS Production Setup**: Replaced CDN with properly bundled Tailwind CSS v3 for production builds
 
 ## Project Architecture
 
@@ -19,7 +19,7 @@ AI Barista is a Progressive Web App that helps Indonesian coffee lovers discover
 - **Framework**: React 19 with TypeScript
 - **Build Tool**: Vite 6.2
 - **Routing**: React Router DOM v7 (HashRouter for PWA compatibility)
-- **Styling**: Tailwind CSS v4 with PostCSS (@tailwindcss/postcss)
+- **Styling**: Tailwind CSS v3 with PostCSS
 - **State Management**: React Context API for authentication, chat history, posts, and wishlists
 
 ### Backend (Express.js)
@@ -79,4 +79,4 @@ None configured yet.
 - The app uses HashRouter instead of BrowserRouter for better PWA support
 - Authentication is mock-based using localStorage (no real passwords are checked)
 - The frontend proxies `/api/*` requests to the backend on port 3001
-- Tailwind CSS v4 is properly configured with PostCSS for production builds
+- Tailwind CSS v3 is properly configured with PostCSS for production builds
