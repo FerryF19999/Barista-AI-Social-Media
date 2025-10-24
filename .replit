@@ -51,11 +51,15 @@ externalPort = 3001
 exposeLocalhost = true
 
 [[ports]]
-localPort = 35353
+localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 5000
+localPort = 32899
+externalPort = 3000
+
+[[ports]]
+localPort = 35353
 externalPort = 80
 
 [deployment]
