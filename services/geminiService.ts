@@ -2,7 +2,7 @@ import { ChatMessage, CoffeeShop, CoffeeShopAnalysis } from "../types";
 
 const API_BASE_URL = window.location.hostname.includes('localhost')
   ? 'http://localhost:3001' 
-  : `https://${window.location.hostname}`;
+  : '';
 
 const reliableShopImages = [
   'https://images.pexels.com/photos/261434/pexels-photo-261434.jpeg?auto=compress&cs=tinysrgb&w=400&dpr=1',

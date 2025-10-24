@@ -1,10 +1,16 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
-const PORT = process.env.BACKEND_PORT || 3001;
-const HOST = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
+const isProduction = process.env.NODE_ENV === 'production';
+const PORT = process.env.PORT || (isProduction ? 5000 : 3001);
+const HOST = isProduction ? '0.0.0.0' : 'localhost';
 
 app.use(cors());
 app.use(express.json());
@@ -274,6 +280,20 @@ app.post('/api/generate-title', async (req, res) => {
   }
 });
 
+// Serve static files from the dist directory in production
+if (isProduction) {
+  const distPath = path.join(__dirname, '..', 'dist');
+  app.use(express.static(distPath));
+  
+  // Handle client-side routing by serving index.html for all non-API routes
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
+
 app.listen(PORT, HOST, () => {
   console.log(`Backend server running on http://${HOST}:${PORT}`);
+  if (isProduction) {
+    console.log(`Serving static files from dist directory`);
+  }
 });

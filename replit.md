@@ -62,9 +62,14 @@ The app runs two workflows:
 
 ## Deployment
 - **Deployment Type**: VM (always running)
-- **Command**: Sets NODE_ENV=production and runs both backend (on 0.0.0.0:3001) and frontend (on 0.0.0.0:5000) together
+- **Build Command**: `npm run build` - Builds the frontend into the dist folder
+- **Run Command**: `npm start` - Runs the Express server in production mode
+- **Production Setup**: 
+  - Backend listens on port 5000 (or PORT env var) on 0.0.0.0
+  - Serves built static files from the dist folder
+  - Handles client-side routing by serving index.html for all non-API routes
+  - API endpoints are available at /api/*
 - **Production URL**: Uses Replit's domain with port 5000
-- **Backend Binding**: In production, backend listens on 0.0.0.0 to be accessible from the proxy
 
 ## User Preferences
 None configured yet.
