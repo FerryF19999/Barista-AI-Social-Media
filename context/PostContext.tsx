@@ -1,60 +1,8 @@
 import React, { createContext, useState, useEffect, ReactNode, useContext, useCallback } from 'react';
+import { RealtimeChannel } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabase';
 import { Post, User, Comment } from '../types';
 import { AuthContext } from './AuthContext';
-import useSyncedLocalStorage from '../hooks/useSyncedLocalStorage';
-
-
-// --- Mock Data for Initial Feed ---
-const mockUser1: User = { id: 'user-123', name: 'KopiLover', avatarUrl: 'https://images.pexels.com/photos/1844547/pexels-photo-1844547.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&dpr=1', email: 'goresf19@gmail.com', bio: 'Pecinta kopi dan senja.', following: ['user-456'], followers: ['user-456'] };
-const mockUser2: User = { id: 'user-456', name: 'Andi Pratama', avatarUrl: 'https://images.pexels.com/photos/837358/pexels-photo-837358.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&dpr=1', email: 'andi@example.com', bio: 'Barista & Roaster.', following: ['user-123'], followers: ['user-123'] };
-const mockUser3: User = { id: 'user-789', name: 'CoffeeAddict', avatarUrl: 'https://images.pexels.com/photos/842980/pexels-photo-842980.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&dpr=1', email: 'addict@example.com', bio: 'Exploring beans.', following: [], followers: [] };
-
-const MOCK_POSTS: Post[] = [
-    {
-        id: 'post_mock_1',
-        author: mockUser2,
-        imageUrl: 'https://images.pexels.com/photos/302899/pexels-photo-302899.jpeg?auto=compress&cs=tinysrgb&w=600',
-        caption: 'Seni latte hari ini. Mencoba pola baru!',
-        locationTag: 'Roast & Co.',
-        likes: ['user-123', 'user-789'],
-        isBookmarked: false,
-        comments: [
-            { id: 'comment_mock_1', text: 'Keren banget, bro!', author: mockUser1 },
-        ],
-        views: ['user-123', 'user-456', 'user-789'],
-    },
-    {
-        id: 'post_mock_2',
-        author: mockUser1,
-        imageUrl: 'https://images.pexels.com/photos/1235717/pexels-photo-1235717.jpeg?auto=compress&cs=tinysrgb&w=600',
-        caption: 'Menikmati secangkir V60 di pagi yang cerah. Sempurna.',
-        locationTag: 'Rumah',
-        likes: ['user-456'],
-        isBookmarked: true,
-        comments: [],
-        views: ['user-123', 'user-456'],
-    },
-    {
-        id: 'post_mock_3',
-        author: mockUser3,
-        imageUrl: 'https://images.pexels.com/photos/373639/pexels-photo-373639.jpeg?auto=compress&cs=tinysrgb&w=600',
-        caption: 'Biji kopi Ethiopia baru, aromanya luar biasa!',
-        locationTag: 'Kopi Kenangan',
-        likes: [],
-        isBookmarked: false,
-        comments: [],
-        views: ['user-789'],
-    },
-];
-// --- End of Mock Data ---
-
-const POSTS_DB_KEY = 'posts-db';
-
-const getInitialPosts = (): Post[] => {
-    // This function now only provides the initial fallback data.
-    // The useSyncedLocalStorage hook will handle reading from storage.
-    return MOCK_POSTS;
-};
 
 interface PostContextType {
   posts: Post[];
@@ -70,139 +18,262 @@ interface PostContextType {
 export const PostContext = createContext<PostContextType | undefined>(undefined);
 
 export const PostProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [posts, setPosts] = useSyncedLocalStorage<Post[]>(POSTS_DB_KEY, getInitialPosts);
+  const [posts, setPosts] = useState<Post[]>([]);
   const authContext = useContext(AuthContext);
   const { user, users } = authContext || {};
 
-  // Effect to synchronize post author data with the main users list from AuthContext.
-  // This ensures that if a user updates their profile (e.g., name or avatar),
-  // it reflects on all their existing posts. This logic remains important.
+  const fetchPosts = useCallback(async () => {
+    try {
+      const { data: postsData, error } = await supabase
+        .from('posts')
+        .select(`
+          *,
+          author:profiles!posts_author_id_fkey(*),
+          likes:post_likes(user_id),
+          bookmarks:post_bookmarks(user_id),
+          views:post_views(user_id),
+          comments(*, author:profiles!comments_author_id_fkey(*))
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (postsData) {
+        const formattedPosts: Post[] = postsData.map((post: any) => ({
+          id: post.id,
+          author: {
+            id: post.author.id,
+            name: post.author.name,
+            email: post.author.email,
+            avatarUrl: post.author.avatar_url,
+            bio: post.author.bio || '',
+            following: [],
+            followers: [],
+          },
+          imageUrl: post.image_url,
+          caption: post.caption,
+          locationTag: post.location_tag,
+          likes: post.likes?.map((like: any) => like.user_id) || [],
+          isBookmarked: user ? post.bookmarks?.some((b: any) => b.user_id === user.id) : false,
+          views: post.views?.map((view: any) => view.user_id) || [],
+          comments: post.comments?.map((comment: any) => ({
+            id: comment.id,
+            text: comment.text,
+            author: {
+              id: comment.author.id,
+              name: comment.author.name,
+              email: comment.author.email,
+              avatarUrl: comment.author.avatar_url,
+              bio: comment.author.bio || '',
+              following: [],
+              followers: [],
+            },
+          })) || [],
+        }));
+
+        setPosts(formattedPosts);
+      }
+    } catch (error) {
+      console.error('Error fetching posts:', error);
+    }
+  }, [user]);
+
   useEffect(() => {
-    if (users && users.length > 0) {
-      const userMap = new Map<string, User>(users.map(u => [u.id, u]));
-      
-      setPosts(prevPosts => {
-        let hasChanges = false;
-        const updatedPosts = prevPosts.map(post => {
-          const updatedAuthor = userMap.get(post.author.id);
-          // Check if author data is stale before updating
-          if (updatedAuthor && (post.author.name !== updatedAuthor.name || post.author.avatarUrl !== updatedAuthor.avatarUrl)) {
-            hasChanges = true;
-            // Also update author info in comments
-            const updatedComments = post.comments.map(comment => {
-              const updatedCommentAuthor = userMap.get(comment.author.id);
-              if (updatedCommentAuthor && (comment.author.name !== updatedCommentAuthor.name || comment.author.avatarUrl !== updatedCommentAuthor.avatarUrl)) {
-                return { ...comment, author: updatedCommentAuthor };
-              }
-              return comment;
-            });
-            return { ...post, author: updatedAuthor, comments: updatedComments };
-          }
-          return post;
+    if (user) {
+      fetchPosts();
+
+      const channel: RealtimeChannel = supabase
+        .channel('posts-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => {
+          fetchPosts();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'post_likes' }, () => {
+          fetchPosts();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'post_bookmarks' }, () => {
+          fetchPosts();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'post_views' }, () => {
+          fetchPosts();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, () => {
+          fetchPosts();
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [user, fetchPosts]);
+
+  const addPost = useCallback(async (postData: { imageUrl: string; caption: string; locationTag: string }) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('posts')
+        .insert({
+          author_id: user.id,
+          image_url: postData.imageUrl,
+          caption: postData.caption,
+          location_tag: postData.locationTag,
         });
 
-        // Only update state if there were actual changes to prevent infinite loops
-        return hasChanges ? updatedPosts : prevPosts;
-      });
+      if (error) throw error;
+
+      await fetchPosts();
+    } catch (error) {
+      console.error('Error adding post:', error);
     }
-  }, [users, setPosts]);
+  }, [user, fetchPosts]);
 
-
-  const addPost = useCallback((postData: { imageUrl: string; caption: string; locationTag: string }) => {
+  const toggleLike = useCallback(async (postId: string) => {
     if (!user) return;
 
-    const newPost: Post = {
-      id: `post_${Date.now()}`,
-      author: user,
-      imageUrl: postData.imageUrl,
-      caption: postData.caption,
-      locationTag: postData.locationTag,
-      likes: [],
-      isBookmarked: false,
-      comments: [],
-      views: [],
-    };
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
 
-    setPosts(prevPosts => [newPost, ...prevPosts]);
-  }, [user, setPosts]);
+    const isLiked = post.likes.includes(user.id);
 
-  const toggleLike = useCallback((postId: string) => {
-    if (!user) return;
-    const userId = user.id;
+    try {
+      if (isLiked) {
+        const { error } = await supabase
+          .from('post_likes')
+          .delete()
+          .eq('post_id', postId)
+          .eq('user_id', user.id);
 
-    setPosts(prevPosts =>
-      prevPosts.map(post => {
-        if (post.id === postId) {
-          const isLiked = post.likes.includes(userId);
-          const updatedLikes = isLiked
-            ? post.likes.filter(id => id !== userId)
-            : [...post.likes, userId];
-          return { ...post, likes: updatedLikes };
-        }
-        return post;
-      })
-    );
-  }, [user, setPosts]);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('post_likes')
+          .insert({
+            post_id: postId,
+            user_id: user.id,
+          });
 
-  const toggleBookmark = useCallback((postId: string) => {
-    setPosts(prevPosts =>
-      prevPosts.map(post => {
-        if (post.id === postId) {
-          return { ...post, isBookmarked: !post.isBookmarked };
-        }
-        return post;
-      })
-    );
-  }, [setPosts]);
-  
-  const incrementPostView = useCallback((postId: string) => {
-      if (!user) return;
-      const userId = user.id;
+        if (error) throw error;
+      }
+    } catch (error) {
+      console.error('Error toggling like:', error);
+    }
+  }, [user, posts]);
 
-      setPosts(prevPosts =>
-          prevPosts.map(post => {
-              if (post.id === postId) {
-                  // Only add user to views array if they haven't viewed it before
-                  if (!post.views.includes(userId)) {
-                      return { ...post, views: [...post.views, userId] };
-                  }
-              }
-              return post;
-          })
-      );
-  }, [user, setPosts]);
-
-  const deletePost = useCallback((postId: string) => {
-    setPosts(prevPosts => prevPosts.filter(post => post.id !== postId));
-  }, [setPosts]);
-
-  const updatePost = useCallback((postId: string, updatedData: { caption: string; locationTag: string }) => {
-    setPosts(prevPosts =>
-      prevPosts.map(post =>
-        post.id === postId ? { ...post, ...updatedData } : post
-      )
-    );
-  }, [setPosts]);
-
-  const addComment = useCallback((postId: string, text: string) => {
+  const toggleBookmark = useCallback(async (postId: string) => {
     if (!user) return;
 
-    const newComment: Comment = {
-      id: `comment_${Date.now()}`,
-      text,
-      author: user,
-    };
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
 
-    setPosts(prevPosts => 
-      prevPosts.map(post => {
-        if (post.id === postId) {
-          return { ...post, comments: [...post.comments, newComment] };
-        }
-        return post;
-      })
-    );
-  }, [user, setPosts]);
+    const isBookmarked = post.isBookmarked;
 
+    try {
+      if (isBookmarked) {
+        const { error } = await supabase
+          .from('post_bookmarks')
+          .delete()
+          .eq('post_id', postId)
+          .eq('user_id', user.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('post_bookmarks')
+          .insert({
+            post_id: postId,
+            user_id: user.id,
+          });
+
+        if (error) throw error;
+      }
+
+      await fetchPosts();
+    } catch (error) {
+      console.error('Error toggling bookmark:', error);
+    }
+  }, [user, posts, fetchPosts]);
+
+  const incrementPostView = useCallback(async (postId: string) => {
+    if (!user) return;
+
+    const post = posts.find(p => p.id === postId);
+    if (!post || post.views.includes(user.id)) return;
+
+    try {
+      const { error } = await supabase
+        .from('post_views')
+        .insert({
+          post_id: postId,
+          user_id: user.id,
+        });
+
+      if (error && error.code !== '23505') {
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error incrementing view:', error);
+    }
+  }, [user, posts]);
+
+  const deletePost = useCallback(async (postId: string) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('posts')
+        .delete()
+        .eq('id', postId)
+        .eq('author_id', user.id);
+
+      if (error) throw error;
+
+      await fetchPosts();
+    } catch (error) {
+      console.error('Error deleting post:', error);
+    }
+  }, [user, fetchPosts]);
+
+  const updatePost = useCallback(async (postId: string, updatedData: { caption: string; locationTag: string }) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('posts')
+        .update({
+          caption: updatedData.caption,
+          location_tag: updatedData.locationTag,
+        })
+        .eq('id', postId)
+        .eq('author_id', user.id);
+
+      if (error) throw error;
+
+      await fetchPosts();
+    } catch (error) {
+      console.error('Error updating post:', error);
+    }
+  }, [user, fetchPosts]);
+
+  const addComment = useCallback(async (postId: string, text: string) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('comments')
+        .insert({
+          post_id: postId,
+          author_id: user.id,
+          text,
+        });
+
+      if (error) throw error;
+
+      await fetchPosts();
+    } catch (error) {
+      console.error('Error adding comment:', error);
+    }
+  }, [user, fetchPosts]);
 
   const value = { posts, addPost, toggleLike, toggleBookmark, incrementPostView, deletePost, updatePost, addComment };
 
